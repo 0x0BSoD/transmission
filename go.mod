@@ -1,3 +1,3 @@
-module github.com/odwrtw/transmission
+module github.com/0x0BSoD/transmission
 
 go 1.14
