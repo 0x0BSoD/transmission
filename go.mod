@@ -1,3 +1,3 @@
 module github.com/0x0BSoD/transmission
 
-go 1.14
+go 1.18
