@@ -20,6 +20,7 @@ const (
 var torrentGetFields = []string{
 	"activityDate",
 	"addedDate",
+	"availability",
 	"bandwidthPriority",
 	"comment",
 	"corruptEver",
@@ -31,38 +32,43 @@ var torrentGetFields = []string{
 	"downloadedEver",
 	"downloadLimit",
 	"downloadLimited",
+	"editDate",
 	"error",
 	"errorString",
 	"eta",
 	"etaIdle",
+	"file-count",
 	"files",
 	"fileStats",
+	"group",
 	"hashString",
 	"haveUnchecked",
 	"haveValid",
 	"honorsSessionLimits",
 	"id",
-	"labels",
 	"isFinished",
 	"isPrivate",
 	"isStalled",
+	"labels",
 	"leftUntilDone",
 	"magnetLink",
 	"manualAnnounceTime",
 	"maxConnectedPeers",
 	"metadataPercentComplete",
 	"name",
-	"peer",
+	"peer-limit",
 	"peers",
 	"peersConnected",
 	"peersFrom",
 	"peersGettingFromUs",
 	"peersSendingToUs",
+	"percentComplete",
 	"percentDone",
 	"pieces",
 	"pieceCount",
 	"pieceSize",
 	"priorities",
+	"primary-mime-type",
 	"queuePosition",
 	"rateDownload",
 	"rateUpload",
@@ -73,10 +79,12 @@ var torrentGetFields = []string{
 	"seedIdleMode",
 	"seedRatioLimit",
 	"seedRatioMode",
+	"sequentialDownload",
 	"sizeWhenDone",
 	"startDate",
 	"status",
 	"trackers",
+	"trackerList",
 	"trackerStats",
 	"totalSize",
 	"torrentFile",
@@ -102,8 +110,9 @@ type SetTorrentArg struct {
 	BandwidthPriority   int      `json:"bandwidthPriority,omitempty"`
 	DownloadLimit       int      `json:"downloadLimit,omitempty"`
 	DownloadLimited     bool     `json:"downloadLimited,omitempty"`
-	FilesWanted         []int    `json:"files-wanted,omitempty"`
 	FilesUnwanted       []int    `json:"files-unwanted,omitempty"`
+	FilesWanted         []int    `json:"files-wanted,omitempty"`
+	Group               string   `json:"group,omitempty"`
 	HonorsSessionLimits bool     `json:"honorsSessionLimits,omitempty"`
 	Ids                 int      `json:"ids"`
 	Labels              []string `json:"labels,omitempty"`
@@ -117,11 +126,13 @@ type SetTorrentArg struct {
 	SeedIdleMode        int      `json:"seedIdleMode,omitempty"`
 	SeedRatioLimit      float64  `json:"seedRatioLimit,omitempty"`
 	SeedRatioMode       int      `json:"seedRatioMode,omitempty"`
-	TrackerAdd          []string `json:"trackerAdd,omitempty"`
-	TrackerRemove       []int    `json:"trackerRemove,omitempty"`
-	// TrackerReplace       `json:"trackerReplace,omitempty"`
-	UploadLimit   int  `json:"uploadLimit,omitempty"`
-	UploadLimited bool `json:"uploadLimited,omitempty"`
+	SequentialDownload  bool     `json:"sequentialDownload,omitempty"`
+	TrackerList         []string `json:"trackerList,omitempty"`
+	UploadLimit         int      `json:"uploadLimit,omitempty"`
+	UploadLimited       bool     `json:"uploadLimited,omitempty"`
+	// DEPRICATED TrackerRemove  []int    `json:"trackerRemove,omitempty"`
+	// DEPRICATED TrackerReplace []int    `json:"trackerReplace,omitempty"`
+	// DEPRICATED TrackerAdd     []string `json:"trackerAdd,omitempty"`
 }
 
 // Torrent represent a torrent present in transmission
@@ -281,6 +292,10 @@ type Trackers struct {
 	Tier     int
 }
 
+// ==================================================
+// Torrent action requests
+// https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md#31-torrent-action-requests
+// ==================================================
 func (t *Torrent) torrentAction(method string) error {
 	type Arg struct {
 		Ids int `json:"ids"`
@@ -329,7 +344,7 @@ func (t *Torrent) Reannounce() error {
 // PathRename renames a file or directory in a torrent.
 func (t *Torrent) PathRename(path string, newPath string) error {
 	type arg struct {
-		Ids  []int  `json:"ids,string"`
+		Ids  []int  `json:"ids"`
 		Path string `json:"path"`
 		Name string `json:"name"`
 	}
@@ -355,7 +370,7 @@ func (t *Torrent) PathRename(path string, newPath string) error {
 // otherwise, search "location" for files
 func (t *Torrent) SetLocation(path string, move bool) error {
 	type arg struct {
-		Ids      []int  `json:"ids,string"`
+		Ids      []int  `json:"ids"`
 		Location string `json:"location"`
 		Move     bool   `json:"move,omitempty"`
 	}
@@ -376,6 +391,11 @@ func (t *Torrent) SetLocation(path string, move bool) error {
 	return nil
 }
 
+// ==================================================
+// Torrent mutator: torrent-set
+// https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md#32-torrent-mutator-torrent-set
+// ==================================================
+
 // Set changes torrent param see SetTorrentArg
 func (t *Torrent) Set(arg SetTorrentArg) error {
 	arg.Ids = t.ID
@@ -391,11 +411,16 @@ func (t *Torrent) Set(arg SetTorrentArg) error {
 	return nil
 }
 
-// Update torrent information from transmission
-func (t *Torrent) Update() error {
+// ==================================================
+// Torrent accessor: torrent-get
+// https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md#33-torrent-accessor-torrent-get
+// ==================================================
+
+// Get torrent information from transmission
+func (t *Torrent) Get() error {
 	type Arg struct {
-		Ids    int      `json:"ids"`
-		Fields []string `json:"fields,omitempty"`
+		Ids    int      `json:"ids,omitempty"`
+		Fields []string `json:"fields"`
 	}
 	tReq := &Request{
 		Arguments: Arg{

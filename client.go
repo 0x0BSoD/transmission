@@ -2,11 +2,11 @@ package transmission
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -28,6 +28,7 @@ type Config struct {
 type Client struct {
 	Session   *Session
 	sessionID string
+	Context   context.Context
 	*Config
 }
 
@@ -61,6 +62,7 @@ type AddTorrentArg struct {
 type Request struct {
 	Method    string      `json:"method"`
 	Arguments interface{} `json:"arguments"`
+	Context   context.Context
 }
 
 // Response object for API call response
@@ -86,12 +88,12 @@ func (c *Client) Do(req *http.Request, retry bool) (*http.Response, error) {
 	}
 
 	//Body copy for replay it if needed
-	b, err := ioutil.ReadAll(req.Body)
+	b, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
 	}
 	req.Body.Close()
-	req.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+	req.Body = io.NopCloser(bytes.NewBuffer(b))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -109,11 +111,11 @@ func (c *Client) Do(req *http.Request, retry bool) (*http.Response, error) {
 		c.sessionID = resp.Header.Get("X-Transmission-Session-Id")
 
 		// Copy the previous request body in order to do it again
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+		req.Body = io.NopCloser(bytes.NewBuffer(b))
 
 		// We also need to read the body before closing it, or it will trigger
 		// a "net/http: request cancelled" error
-		io.Copy(ioutil.Discard, resp.Body)
+		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
 		return c.Do(req, false)
@@ -123,73 +125,89 @@ func (c *Client) Do(req *http.Request, retry bool) (*http.Response, error) {
 }
 
 func (c *Client) request(tReq *Request, tResp *Response) error {
-
 	data, err := json.Marshal(tReq)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.Address, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(c.Context, "POST", c.Address, bytes.NewReader(data))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	resp, err := c.Do(req, true)
+	if c.User != "" || c.Password != "" {
+		req.SetBasicAuth(c.User, c.Password)
+	}
+	if c.sessionID != "" {
+		req.Header.Set("X-Transmission-Session-Id", c.sessionID)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusConflict {
+		c.sessionID = resp.Header.Get("X-Transmission-Session-Id")
+		return c.request(tReq, tResp)
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("got http error %s", resp.Status)
+		return fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	err = json.Unmarshal(body, tResp)
-	if err != nil {
-		return err
+	if err := json.Unmarshal(body, tResp); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if tResp.Result != "success" {
-		return fmt.Errorf("transmission: request response %q", tResp.Result)
+		return fmt.Errorf("transmission error: %s", tResp.Result)
 	}
+
 	return nil
 }
 
 // GetTorrents return list of torrent
-func (c *Client) GetTorrents() ([]*Torrent, error) {
+func (c *Client) GetTorrents(ctx context.Context, fields []string) ([]*Torrent, error) {
+	if len(fields) == 0 {
+		fields = torrentGetFields // Default fields if none specified.
+	}
+
 	type arg struct {
 		Fields []string `json:"fields,omitempty"`
 		Ids    []int    `json:"ids,omitempty"`
 	}
 
 	tReq := &Request{
-		Arguments: arg{
-			Fields: torrentGetFields,
-		},
+		Arguments: struct {
+			Fields []string `json:"fields"`
+		}{Fields: fields},
 		Method: "torrent-get",
 	}
 
-	r := &Response{Arguments: &Torrents{}}
-
-	err := c.request(tReq, r)
+	tResp := &Response{Arguments: &Torrents{}}
+	err := c.request(tReq, tResp)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch torrents: %w", err)
 	}
-	t := r.Arguments.(*Torrents).Torrents
-	for i := range t {
-		t[i].Client = c
+
+	torrents := tResp.Arguments.(*Torrents).Torrents
+	for _, t := range torrents {
+		t.Client = c // Attach the client to each torrent.
 	}
-	return t, nil
+
+	return torrents, nil
 }
 
 // GetTorrentMap returns a map of torrents indexed by torrent hash.
-func (c *Client) GetTorrentMap() (TorrentMap, error) {
-	torrents, err := c.GetTorrents()
+func (c *Client) GetTorrentMap(ctx context.Context) (TorrentMap, error) {
+	torrents, err := c.GetTorrents(ctx, []string{})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +269,7 @@ func (c *Client) RemoveTorrents(torrents []*Torrent, removeData bool) error {
 	}
 
 	type arg struct {
-		Ids             []int `json:"ids,string"`
+		Ids             []int `json:"ids"`
 		DeleteLocalData bool  `json:"delete-local-data,omitempty"`
 	}
 
