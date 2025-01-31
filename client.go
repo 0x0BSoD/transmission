@@ -10,10 +10,8 @@ import (
 	"net/http"
 )
 
-var (
-	// ErrDuplicateTorrent returned when the torrent is already added
-	ErrDuplicateTorrent = errors.New("Torrent already added")
-)
+// ErrDuplicateTorrent returned when the torrent is already added
+var ErrDuplicateTorrent = errors.New("Torrent already added")
 
 // Config used to configure transmission client
 type Config struct {
@@ -62,7 +60,6 @@ type AddTorrentArg struct {
 type Request struct {
 	Method    string      `json:"method"`
 	Arguments interface{} `json:"arguments"`
-	Context   context.Context
 }
 
 // Response object for API call response
@@ -87,7 +84,7 @@ func (c *Client) Do(req *http.Request, retry bool) (*http.Response, error) {
 		req.Header.Add("X-Transmission-Session-Id", c.sessionID)
 	}
 
-	//Body copy for replay it if needed
+	// Body copy for replay it if needed
 	b, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
@@ -174,7 +171,7 @@ func (c *Client) request(tReq *Request, tResp *Response) error {
 }
 
 // GetTorrents return list of torrent
-func (c *Client) GetTorrents(ctx context.Context, fields []string) ([]*Torrent, error) {
+func (c *Client) GetTorrents(fields []string) ([]*Torrent, error) {
 	if len(fields) == 0 {
 		fields = torrentGetFields // Default fields if none specified.
 	}
@@ -206,8 +203,8 @@ func (c *Client) GetTorrents(ctx context.Context, fields []string) ([]*Torrent, 
 }
 
 // GetTorrentMap returns a map of torrents indexed by torrent hash.
-func (c *Client) GetTorrentMap(ctx context.Context) (TorrentMap, error) {
-	torrents, err := c.GetTorrents(ctx, []string{})
+func (c *Client) GetTorrentMap() (TorrentMap, error) {
+	torrents, err := c.GetTorrents([]string{})
 	if err != nil {
 		return nil, err
 	}
