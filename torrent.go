@@ -313,7 +313,6 @@ func (t *Torrent) torrentAction(method string) error {
 		return err
 	}
 	return nil
-
 }
 
 // Start torrent

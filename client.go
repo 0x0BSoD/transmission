@@ -58,14 +58,14 @@ type AddTorrentArg struct {
 
 // Request object for API call
 type Request struct {
-	Method    string      `json:"method"`
-	Arguments interface{} `json:"arguments"`
+	Method    string `json:"method"`
+	Arguments any    `json:"arguments"`
 }
 
 // Response object for API call response
 type Response struct {
-	Arguments interface{} `json:"arguments"`
-	Result    string      `json:"result"`
+	Arguments any    `json:"arguments"`
+	Result    string `json:"result"`
 }
 
 // Do low level function for interact with transmission only take care of
