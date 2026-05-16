@@ -90,9 +90,9 @@ type Session struct {
 	SeedRatioLimited          bool    `json:"seedRatioLimited"`
 	SeedQueueSize             int     `json:"seed-queue-size"`
 	SeedQueueEnabled          bool    `json:"seed-queue-enabled"`
-	SpeedLimitDown            int     `json:"speed-limit-down"`
+	SpeedLimitDown            float32 `json:"speed-limit-down"`
 	SpeedLimitDownEnabled     bool    `json:"speed-limit-down-enabled"`
-	SpeedLimitUp              int     `json:"speed-limit-up"`
+	SpeedLimitUp              float32 `json:"speed-limit-up"`
 	SpeedLimitUpEnabled       bool    `json:"speed-limit-up-enabled"`
 	StartAddedTorrents        bool    `json:"start-added-torrents"`
 	TrashOriginalTorrentFiles bool    `json:"trash-original-torrent-files"`
@@ -131,7 +131,7 @@ type Units struct {
 	MemoryBytes int      `json:"memory-bytes"`
 }
 
-// Set set session params see SetSessionArgs
+// Set session params see SetSessionArgs
 func (s *Session) Set(args SetSessionArgs) error {
 	tReq := &Request{
 		Arguments: args,
